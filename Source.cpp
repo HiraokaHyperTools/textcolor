@@ -1,10 +1,32 @@
 #include <Windows.h>
-#include <stdio.h>
 
-int main(int argc, char **argv) {
+static HANDLE StdOut;
+static HANDLE StdErr;
+
+void WriteStdErr(LPCWSTR text) {
+	DWORD written;
+	WriteConsoleW(StdErr, text, lstrlenW(text), &written, NULL);
+}
+
+bool CharToHex(WCHAR wc, BYTE &value) {
+	if (L'0' <= wc && wc <= L'9') {
+		value = wc - L'0';
+	}
+	else if (L'A' <= wc && wc <= L'F') {
+		value = wc - L'A' + 10;
+	}
+	else if (L'a' <= wc && wc <= L'f') {
+		value = wc - L'a' + 10;
+	}
+	else {
+		return false;
+	}
+	return true;
+}
+
+int Run(int argc, WCHAR **argv) {
 	if (argc >= 2) {
-		int color;
-		if (strcmp(argv[1], "x") == 0) {
+		if (lstrcmpW(argv[1], L"x") == 0) {
 			HKEY commandProcessorKey = 0;
 			LSTATUS result;
 			if (0 == (result = RegOpenKeyExA(HKEY_CURRENT_USER, "Software\\Microsoft\\Command Processor", 0, KEY_READ, &commandProcessorKey))) {
@@ -15,26 +37,36 @@ int main(int argc, char **argv) {
 					if (dwordValue == 0) {
 						dwordValue = 7;
 					}
-					SetConsoleTextAttribute(
-						GetStdHandle(STD_OUTPUT_HANDLE),
-						(WORD)dwordValue
-					);
+					SetConsoleTextAttribute(StdOut, (WORD)dwordValue);
 					return 0;
 				}
 			}
 			return 2;
 		}
-		if (sscanf_s(argv[1], "%x", &color) == 1) {
-			SetConsoleTextAttribute(
-				GetStdHandle(STD_OUTPUT_HANDLE),
-				(WORD)color
-			);
+
+		BYTE hi, lo;
+		if (CharToHex(argv[1][0], hi) && CharToHex(argv[1][1], lo)) {
+			SetConsoleTextAttribute(StdOut, (WORD)((hi << 4) | lo));
 			return 0;
 		}
 	}
-	fprintf(stderr,
-		"textcolor x ; default\n"
-		"textcolor 07 ; back=0 fore=7\n"
+	WriteStdErr(
+		L"textcolor x ; default\n"
+		L"textcolor 07 ; back=0 fore=7\n"
 	);
 	return 1;
+}
+
+void EntryPoint() {
+	int argc = 0;
+	LPWSTR *argv = CommandLineToArgvW(
+		GetCommandLineW(),
+		&argc
+	);
+
+	StdOut = GetStdHandle(STD_OUTPUT_HANDLE);
+	StdErr = GetStdHandle(STD_ERROR_HANDLE);
+
+	int retCode = Run(argc, argv);
+	ExitProcess(retCode);
 }
